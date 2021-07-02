@@ -7,7 +7,7 @@ class Object
 {
 public:
 	Object(const char* classname);
-	virtual const std::string& toString();
+	virtual std::string toString() const;
 	Log* log() { return _logInstance; }
 	const char* className() { return _className; }
 private:

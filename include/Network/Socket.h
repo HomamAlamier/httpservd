@@ -2,32 +2,22 @@
 #define SOCKET_H
 
 #include <string>
+#include <Object.h>
+#include <Network/IPEndPoint.h>
+
+struct addrinfo;
+namespace std
+{
+	class thread;
+}
+class Socket;
+class ByteArray;
 
 typedef unsigned long long socket_tt;
+typedef void(*AcceptConnectionCallBack)(Socket*);
+typedef void(*DataReceiveCallBack)(Socket*, int);
 
-#include <Globals.h>
-#include <Object.h>
-struct addrinfo;
-class IPEndPoint : Object
-{
-public:
-	enum IPType 
-	{
-		IPv4 = 2,
-		IPv6 = 23
-	};
-	int port() const { return _port;  }
-	IPType ipType() const { return _type; }
-	const std::string& ip() const { return _ip; }
-
-	IPEndPoint(const std::string& ip, int port, IPType type);
-private:
-	int _port;
-	IPType _type;
-	std::string _ip;
-};
-
-class Socket : Object
+class Socket : public Object
 {
 public:
 	enum SocketType
@@ -48,7 +38,8 @@ public:
 		None,
 		Listening,
 		Connecting,
-		Connected
+		Connected,
+		Accepting
 	};
 
 	const IPEndPoint* ipEndPoint() const { return _endPoint; }
@@ -59,15 +50,32 @@ public:
 	Socket(SocketType type, Protocol protocol);
 	~Socket();
 	void Bind(const IPEndPoint* endpoint);
-	void Listen(int backlog);
+	bool Listen(int backlog);
+	void Close();
+	Socket* Accept();
+	void AcceptAsync(AcceptConnectionCallBack callback);
+	int Write(const ByteArray& byteArray);
+	int Read(ByteArray* byteArray, int size);
+	void ReadAsync(ByteArray* buffer, DataReceiveCallBack callback);
+
 private:
-	void endPointToNative();
+	bool endPointToNative();;
+	void acceptConnection();
+	void receiveData();
 	socket_tt _sockPtr;
 	const IPEndPoint* _endPoint;
 	SocketType _type;
 	Protocol _pro;
 	SocketStatus _st;
 	addrinfo* _nIp;
+	bool _running;
+	std::thread* _acceptThread;
+	bool _acceptThreadAlive;
+	AcceptConnectionCallBack _acceptCallBack;
+	std::thread* _receiveThread;
+	bool _receiveThreadAlive;
+	DataReceiveCallBack _receiveCallBack;
+	ByteArray* _receiveBuffer;
 };
 
 

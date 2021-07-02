@@ -7,3 +7,4 @@
 #define DUMP_STRING(str) std::string("(string:" + std::to_string(str.size()) + ") ") + #str + " = " + str 
 
 #endif // !DUMP_VAR
+

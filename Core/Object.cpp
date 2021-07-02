@@ -9,7 +9,7 @@ Object::Object(const char* classname)
 #endif
 #endif // LOG_DEBUG
 }
-const std::string& Object::toString()
+std::string Object::toString() const
 {
 	return std::string(_className) + "()";
 }
