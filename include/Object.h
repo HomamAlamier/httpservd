@@ -10,6 +10,7 @@ public:
 	virtual std::string toString() const;
 	Log* log() { return _logInstance; }
 	const char* className() { return _className; }
+	explicit operator std::string() const { return toString(); }
 private:
 	Log* _logInstance;
 	const char* _className;

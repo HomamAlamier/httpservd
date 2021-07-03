@@ -7,4 +7,4 @@ cmake_minimum_required (VERSION 3.8)
 add_executable (Server "Server.cpp" "Server.h")
 
 # TODO: Add tests and install targets if needed.
-target_link_libraries(Server libLog libCore libNetwork)
+target_link_libraries(Server libLog libCore libNetwork libWeb)

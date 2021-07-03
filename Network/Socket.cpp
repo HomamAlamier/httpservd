@@ -44,10 +44,10 @@ Socket::Socket(SocketType type, Protocol protocol)
 	, _running(false)
 	, _acceptThread(nullptr)
 	, _acceptThreadAlive(false)
-	, _acceptCallBack(nullptr)
 	, _receiveThread(nullptr)
 	, _receiveThreadAlive(false)
-	, _receiveCallBack(nullptr)
+	, _receiveBuffer(nullptr)
+	, _callbacksPtr(nullptr)
 {
 	if (!_os_socket_inited_)
 	{
@@ -189,11 +189,10 @@ Socket* Socket::Accept()
 		return nullptr;
 	}
 }
-void Socket::AcceptAsync(AcceptConnectionCallBack callback)
+void Socket::AcceptAsync()
 {
-	if (_acceptThread != nullptr || callback == nullptr)
+	if (_acceptThread != nullptr || _callbacksPtr == nullptr)
 		return;
-	_acceptCallBack = callback;
 	_running = true;
 	_acceptThread = new std::thread(&Socket::acceptConnection, this);
 }
@@ -203,7 +202,7 @@ void Socket::acceptConnection()
 	while (_running)
 	{
 		Socket* s = Accept();
-		_acceptCallBack(s);
+		_callbacksPtr->acceptConnectionCallBack(s);
 	}
 	_acceptThreadAlive = false;
 }
@@ -221,11 +220,10 @@ int Socket::Read(ByteArray* byteArray, int size)
 	int count = recv(_sockPtr, byteArray->dataPtr(), size, 0);
 	return count;
 }
-void Socket::ReadAsync(ByteArray* buffer, DataReceiveCallBack callback)
+void Socket::ReadAsync(ByteArray* buffer)
 {
-	if (_receiveThread != nullptr || callback == nullptr)
+	if (_receiveThread != nullptr || _callbacksPtr == nullptr)
 		return;
-	_receiveCallBack = callback;
 	_receiveBuffer = buffer;
 	_running = true;
 	_receiveThread = new std::thread(&Socket::receiveData, this);
@@ -238,8 +236,15 @@ void Socket::receiveData()
 		int c = Read(_receiveBuffer, _receiveBuffer->size());
 		if (c > 0 && _running)
 		{
-			_receiveCallBack(this, c);
+			_callbacksPtr->dataReceiveCallBack(this, _receiveBuffer, c);
 		}
 	}
 	_receiveThreadAlive = false;
+}
+void Socket::setSocketCallBacks(SocketCallBacks* ptr)
+{
+	if (ptr != nullptr)
+	{
+		_callbacksPtr = ptr;
+	}
 }

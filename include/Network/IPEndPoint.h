@@ -17,6 +17,7 @@ public:
 	const std::string& ip() const { return _ip; }
 
 	IPEndPoint(const std::string& ip, int port, IPType type);
+	std::string toString() const override;
 private:
 	int _port;
 	IPType _type;

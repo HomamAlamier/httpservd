@@ -14,8 +14,15 @@ class Socket;
 class ByteArray;
 
 typedef unsigned long long socket_tt;
-typedef void(*AcceptConnectionCallBack)(Socket*);
-typedef void(*DataReceiveCallBack)(Socket*, int);
+
+class SocketCallBacks
+{
+	friend Socket;
+protected:
+	virtual void acceptConnectionCallBack(Socket*) = 0;
+	virtual void dataReceiveCallBack(Socket*, const ByteArray*, int) = 0;
+};
+
 
 class Socket : public Object
 {
@@ -53,11 +60,11 @@ public:
 	bool Listen(int backlog);
 	void Close();
 	Socket* Accept();
-	void AcceptAsync(AcceptConnectionCallBack callback);
+	void AcceptAsync();
 	int Write(const ByteArray& byteArray);
 	int Read(ByteArray* byteArray, int size);
-	void ReadAsync(ByteArray* buffer, DataReceiveCallBack callback);
-
+	void ReadAsync(ByteArray* buffer);
+	void setSocketCallBacks(SocketCallBacks* ptr);
 private:
 	bool endPointToNative();;
 	void acceptConnection();
@@ -71,11 +78,10 @@ private:
 	bool _running;
 	std::thread* _acceptThread;
 	bool _acceptThreadAlive;
-	AcceptConnectionCallBack _acceptCallBack;
 	std::thread* _receiveThread;
 	bool _receiveThreadAlive;
-	DataReceiveCallBack _receiveCallBack;
 	ByteArray* _receiveBuffer;
+	SocketCallBacks* _callbacksPtr;
 };
 
 

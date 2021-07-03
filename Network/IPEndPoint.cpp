@@ -13,3 +13,7 @@ IPEndPoint::IPEndPoint(const std::string& ip, int port, IPType type)
 	log()->Debug(DUMP_STRING(ip));
 #endif // LOG_LEVEL_5
 }
+std::string IPEndPoint::toString() const
+{
+	return _ip + ":" + std::to_string(_port);
+}
