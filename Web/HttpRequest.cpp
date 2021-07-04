@@ -1,9 +1,12 @@
 #include <Web/HttpRequest.h>
 #include <Core/StringUtils.h>
-HttpRequest::HttpRequest(const std::string& data)
-	: Object("HttpRequest")
-	, _method(NoMethod)
+#include <Core/ByteArray.h>
+#include <Log/Log.h>
+
+HttpRequest::HttpRequest(const std::string& data, const ByteArray* rawData)
+	: _method(NoMethod)
 	, _version(NoVersion)
+	, _data(rawData)
 {
 	auto vec = stringSplit(data, "\r\n");
 

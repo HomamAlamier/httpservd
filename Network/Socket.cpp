@@ -1,8 +1,11 @@
 #include <Network/Socket.h>
-#include <Log/Log.h>
 #include <Globals.h>
 #include <thread>
 #include <Core/ByteArray.h>
+#include <Log/Log.h>
+
+
+
 #ifdef WINOS
 	#ifndef WIN32_LEAN_AND_MEAN
 		#define WIN32_LEAN_AND_MEAN
@@ -34,8 +37,7 @@ static int _socket_instance_count = 0;
 
 
 Socket::Socket(SocketType type, Protocol protocol) 
-	: Object("Socket")
-	, _endPoint(nullptr)
+	: _endPoint(nullptr)
 	, _type(type)
 	, _pro(protocol)
 	, _st(None)
@@ -46,7 +48,7 @@ Socket::Socket(SocketType type, Protocol protocol)
 	, _acceptThreadAlive(false)
 	, _receiveThread(nullptr)
 	, _receiveThreadAlive(false)
-	, _receiveBuffer(nullptr)
+	, _receiveDataPtr(nullptr)
 	, _callbacksPtr(nullptr)
 {
 	if (!_os_socket_inited_)
@@ -57,9 +59,9 @@ Socket::Socket(SocketType type, Protocol protocol)
 			if (iResult == 0)
 			{
 				#ifdef LOG_LEVEL_5
-					log()->Debug("Ws2_32 Lib inited !");
-					log()->Debug(data.szSystemStatus);
-					log()->Debug(data.szDescription);
+					log_WriteLine<Socket>(log_dbg, "Ws2_32 Lib inited !");
+					log_WriteLine<Socket>(log_dbg, data.szSystemStatus);
+					log_WriteLine<Socket>(log_dbg, data.szDescription);
 				#endif // LOG_LEVEL_5
 			}
 		#endif // WIN32
@@ -69,8 +71,9 @@ Socket::Socket(SocketType type, Protocol protocol)
 }
 Socket::~Socket()
 {
+	log_WriteLine<Socket>(log_dbg, "~");
 	_socket_instance_count--;
-	Close();
+	close();
 	if (_socket_instance_count == 0 && _os_socket_inited_)
 	{
 		_os_socket_inited_ = false;
@@ -100,7 +103,7 @@ bool Socket::endPointToNative()
 	int iResult = getaddrinfo(_endPoint->ip().c_str(), std::to_string(_endPoint->port()).c_str(), &hints, &_nIp);
 	if (iResult != 0)
 	{
-		log()->Error("getaddrinfo failed errcode = " + std::to_string(iResult));
+		log_WriteLine<Socket>(log_err, "getaddrinfo failed errcode = " + std::to_string(iResult));
 		return false;
 	}
 	return true;
@@ -122,26 +125,26 @@ bool Socket::Listen(int backlog)
 	if (!endPointToNative())
 		return false;
 
-	log()->Debug("Binding...");
+	log_WriteLine<Socket>(log_dbg, "Binding...");
 	if (bind(_sockPtr, _nIp->ai_addr, int(_nIp->ai_addrlen)) == SOCKET_ERROR)
 	{
-		log()->Error("Socket bind failed !");
-		log()->Error(lastErr());
+		log_WriteLine<Socket>(log_err, "Socket bind failed !");
+		log_WriteLine<Socket>(log_err, lastErr());
 		return false;
 	}
 
-	log()->Debug("Listening...");
+	log_WriteLine<Socket>(log_dbg, "Listening...");
 	if (listen(_sockPtr, backlog) == SOCKET_ERROR)
 	{
-		log()->Error("Socket listen failed !");
-		log()->Error(lastErr());
+		log_WriteLine<Socket>(log_err, "Socket listen failed !");
+		log_WriteLine<Socket>(log_err, lastErr());
 		return false;
 	}
 	_st = Listening;
 	_running = true;
 	return true;
 }
-void Socket::Close()
+void Socket::close()
 {
 	_running = false;
 	_st = None;
@@ -171,7 +174,7 @@ Socket* Socket::Accept()
 		char buf[INET6_ADDRSTRLEN];
 		void* addr_in = get_in_addr(&addr);
 		inet_ntop(_endPoint->ipType(), addr_in, buf, sizeof buf);
-		log()->Debug(std::string("Accepting connection from ") + buf + "...");
+		log_WriteLine<Socket>(log_dbg, std::string("Accepting connection from ") + buf + "...");
 
 		int port = (_endPoint->ipType() == IPEndPoint::IPv4) 
 			? ((struct sockaddr_in*)addr_in)->sin_port 
@@ -185,7 +188,7 @@ Socket* Socket::Accept()
 	}
 	else
 	{
-		log()->Error("Error accepting connection !");
+		log_WriteLine<Socket>(log_err, "Error accepting connection !");
 		return nullptr;
 	}
 }
@@ -220,23 +223,24 @@ int Socket::Read(ByteArray* byteArray, int size)
 	int count = recv(_sockPtr, byteArray->dataPtr(), size, 0);
 	return count;
 }
-void Socket::ReadAsync(ByteArray* buffer)
+void Socket::ReadAsync(ByteArray* buffer, void* data)
 {
 	if (_receiveThread != nullptr || _callbacksPtr == nullptr)
 		return;
 	_receiveBuffer = buffer;
+	_receiveDataPtr = data;
 	_running = true;
 	_receiveThread = new std::thread(&Socket::receiveData, this);
 }
 void Socket::receiveData()
 {
 	_receiveThreadAlive = true;
-	while (_running)
+	while (_running && _sockPtr > 0 && _st == Connected)
 	{
 		int c = Read(_receiveBuffer, _receiveBuffer->size());
 		if (c > 0 && _running)
 		{
-			_callbacksPtr->dataReceiveCallBack(this, _receiveBuffer, c);
+			_callbacksPtr->dataReceiveCallBack(this, _receiveBuffer, _receiveDataPtr, c);
 		}
 	}
 	_receiveThreadAlive = false;
@@ -247,4 +251,19 @@ void Socket::setSocketCallBacks(SocketCallBacks* ptr)
 	{
 		_callbacksPtr = ptr;
 	}
+}
+int Socket::dataAvailable() const
+{
+	#ifdef WINOS
+		u_long count = 0;
+		ioctlsocket(_sockPtr, FIONREAD, &count);
+		return int(count);
+	#endif // WINOS
+
+}
+void Socket::destory()
+{
+	//while (_receiveThreadAlive || _acceptThreadAlive)
+		//std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	delete this;
 }

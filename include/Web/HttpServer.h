@@ -1,24 +1,30 @@
 #ifndef HTTPSERVER_H
 #define HTTPSERVER_H
 
-#include <Object.h>
 #include <Network/Socket.h>
 
 
 class ByteArray;
-class HttpServer : public SocketCallBacks, public Object
+class HttpRequest;
+class HttpResponse;
+class HttpServerFileManager;
+class Directory;
+class HttpServer : public SocketCallBacks
 {
 
 public: 
-	HttpServer(int port);
+	HttpServer(int port, const std::string& hostIp = "0.0.0.0");
 	void Start();
+	void setRootDir(Directory* rootDir);
 protected:
 	void acceptConnectionCallBack(Socket*) override;
-	void dataReceiveCallBack(Socket*, const ByteArray*, int) override;
+	void dataReceiveCallBack(Socket*, ByteArray*, void*, int) override;
 private:
+	HttpResponse processIncomingRequest(const HttpRequest& request);
 	Socket* _socket;
 	ByteArray* _buffer;
 	IPEndPoint* _endPoint;
+	HttpServerFileManager* _fileManager;
 };
 
 

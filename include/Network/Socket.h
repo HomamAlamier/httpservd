@@ -2,7 +2,7 @@
 #define SOCKET_H
 
 #include <string>
-#include <Object.h>
+#include <string>
 #include <Network/IPEndPoint.h>
 
 struct addrinfo;
@@ -20,11 +20,11 @@ class SocketCallBacks
 	friend Socket;
 protected:
 	virtual void acceptConnectionCallBack(Socket*) = 0;
-	virtual void dataReceiveCallBack(Socket*, const ByteArray*, int) = 0;
+	virtual void dataReceiveCallBack(Socket*,ByteArray*, void*, int) = 0;
 };
 
 
-class Socket : public Object
+class Socket 
 {
 public:
 	enum SocketType
@@ -53,18 +53,21 @@ public:
 	SocketType socketType() const { return _type; }
 	Protocol protocol() const { return _pro; }
 	SocketStatus status() const { return _st; }
+	int dataAvailable() const;
+
 
 	Socket(SocketType type, Protocol protocol);
 	~Socket();
 	void Bind(const IPEndPoint* endpoint);
 	bool Listen(int backlog);
-	void Close();
+	void close();
 	Socket* Accept();
 	void AcceptAsync();
 	int Write(const ByteArray& byteArray);
 	int Read(ByteArray* byteArray, int size);
-	void ReadAsync(ByteArray* buffer);
+	void ReadAsync(ByteArray* buffer, void* data = nullptr);
 	void setSocketCallBacks(SocketCallBacks* ptr);
+	void destory();
 private:
 	bool endPointToNative();;
 	void acceptConnection();
@@ -81,6 +84,7 @@ private:
 	std::thread* _receiveThread;
 	bool _receiveThreadAlive;
 	ByteArray* _receiveBuffer;
+	void* _receiveDataPtr;
 	SocketCallBacks* _callbacksPtr;
 };
 

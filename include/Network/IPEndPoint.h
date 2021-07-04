@@ -1,10 +1,8 @@
 #ifndef IPENDPOINT_H
 #define IPENDPOINT_H
-
-#include <Object.h>
 #include <string>
 
-class IPEndPoint : public Object
+class IPEndPoint
 {
 public:
 	enum IPType
@@ -17,7 +15,7 @@ public:
 	const std::string& ip() const { return _ip; }
 
 	IPEndPoint(const std::string& ip, int port, IPType type);
-	std::string toString() const override;
+	std::string toString() const;
 private:
 	int _port;
 	IPType _type;

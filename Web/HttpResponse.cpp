@@ -1,4 +1,7 @@
 #include <Web/HttpResponse.h>
+#include <Core/ByteArray.h>
+#include <Log/Log.h>
+
 
 const char* statusStrings[] = 
 {
@@ -25,7 +28,7 @@ const char* statusStrings[] =
 	"503 Service Unavailable"
 };
 
-const std::string statusCodeToString(int code)
+std::string statusCodeToString(int code)
 {
 	switch (code)
 	{
@@ -67,13 +70,13 @@ std::string httpVersionToString(HttpVersion ver)
 
 
 HttpResponse::HttpResponse()
-	: Object("HttpResponse")
-	, _statusCode(0)
+	: _statusCode(0)
 	, _version(HttpVersion::NoVersion)
+	, _data(new ByteArray())
 {
 
 }
-const std::string& HttpResponse::statusCodeString() const
+std::string HttpResponse::statusCodeString() const
 {
 	return statusCodeToString(_statusCode);
 }
@@ -89,12 +92,23 @@ std::string HttpResponse::serialize() const
 	{
 		tmp += item.first + ": " + item.second + "\r\n";
 	}
-	tmp += "\r\n";
-
+	tmp += "Content-Length: " + std::to_string(_data->size());
+	tmp += "\r\n\r\n";
 	return tmp;
 }
 void HttpResponse::addHeader(std::string key, std::string value)
 {
-	if (key != "" && value != "")
+	if (key != "" && value != "" 
+		&& key != "Content-Type")
 		_headers.insert(std::pair<std::string, std::string>(key, value));
+}
+void HttpResponse::setData(const ByteArray& byteArray)
+{
+	if (_data)
+		delete _data;
+	_data = new ByteArray(byteArray);
+}
+int HttpResponse::contentLength() const
+{
+	return _data->size();
 }
