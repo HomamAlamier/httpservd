@@ -8,7 +8,7 @@
 class HttpServerFileManager
 {
 public:
-	HttpServerFileManager(Directory* rootDir);
+	HttpServerFileManager(Directory* rootDir, Directory* cwd);
 
 	void addDirectory(Directory* dir);
 	void removeDirectory(const std::string& dir);
@@ -18,6 +18,7 @@ public:
 	void setRoot(Directory* root);
 private:
 	Directory* _root;
+	Directory* _cwd;
 	std::vector<Directory*> _dirs;
 };
 

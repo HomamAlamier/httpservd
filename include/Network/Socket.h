@@ -6,6 +6,8 @@
 #include <Network/IPEndPoint.h>
 
 struct addrinfo;
+
+
 namespace std
 {
 	class thread;

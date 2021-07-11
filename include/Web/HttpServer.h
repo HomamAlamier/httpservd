@@ -13,7 +13,7 @@ class HttpServer : public SocketCallBacks
 {
 
 public: 
-	HttpServer(int port, const std::string& hostIp = "0.0.0.0");
+	HttpServer(int port, Directory* cwd, const std::string& hostIp = "0.0.0.0");
 	void Start();
 	void setRootDir(Directory* rootDir);
 protected:
