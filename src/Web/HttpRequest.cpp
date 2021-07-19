@@ -3,14 +3,17 @@
 #include <Core/ByteArray.h>
 #include <Log/Log.h>
 
-HttpRequest::HttpRequest(const std::string& data, const ByteArray* rawData)
+HttpRequest::HttpRequest(const std::string& data, Stream* dataStream)
 	: _method(NoMethod)
 	, _version(NoVersion)
-	, _data(rawData)
+	, _dataStream(dataStream)
 {
 	auto vec = stringSplit(data, "\r\n");
-
+	if (vec.size() == 1)
+		return;
 	auto fstLine = stringSplit(vec[0], " ");
+	if (fstLine.size() != 3)
+		return;
 	if (fstLine[0] == "GET")
 	{
 		_method = Get;
@@ -34,13 +37,13 @@ HttpRequest::HttpRequest(const std::string& data, const ByteArray* rawData)
 
 	_path = fstLine[1];
 
-	if (fstLine[2] == "HTTP/1.1")
+	if (fstLine[2] == "HTTP/1.0")
+	{
+		_version = V1_0;
+	}
+	else if (fstLine[2] == "HTTP/1.1")
 	{
 		_version = V1_1;
-	}
-	else if (fstLine[2] == "HTTP/1.2")
-	{
-		_version = V1_2;
 	}
 	else if (fstLine[2] == "HTTP/2.0")
 	{

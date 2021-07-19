@@ -16,6 +16,8 @@ public:
 	int size() const { return _size; }
 	char* dataPtr() const { return _buffer; }
 	void append(const char* bytes, unsigned size);
+	void remove(unsigned from, unsigned count);
+	void allocate(unsigned size);
 	std::string toStdString() const;
 	void copyData(const char* bytes, int start, int size);
 

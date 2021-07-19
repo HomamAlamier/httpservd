@@ -357,3 +357,5 @@ FodyWeavers.xsd
 
 # VSCode
 .vscode
+# KDevelop
+.kdev4

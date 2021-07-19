@@ -14,20 +14,25 @@ namespace std
 }
 class Socket;
 class ByteArray;
-
 typedef unsigned long long socket_tt;
 
 class SocketCallBacks
 {
 	friend Socket;
+	friend void _async_accept_invoke_callback_(int, Socket*, Socket*);
+	friend void _async_accept_receive_callback_(int, Socket*, ByteArray*, void*, int);
 protected:
 	virtual void acceptConnectionCallBack(Socket*) = 0;
-	virtual void dataReceiveCallBack(Socket*,ByteArray*, void*, int) = 0;
+	virtual bool dataReceiveCallBack(Socket*,ByteArray*, void*, int) = 0;
 };
 
 
 class Socket 
 {
+	friend void _async_accept_handler_();
+	friend void _async_receive_handler_();
+	friend void _async_accept_invoke_callback_(int, Socket*, Socket*);
+	friend void _async_accept_receive_callback_(int, Socket*, ByteArray*, void*, int);
 public:
 	enum SocketType
 	{
@@ -62,6 +67,7 @@ public:
 	~Socket();
 	void Bind(const IPEndPoint* endpoint);
 	bool Listen(int backlog);
+	bool Connect(const IPEndPoint& ipEndPoint);
 	void close();
 	Socket* Accept();
 	void AcceptAsync();
@@ -70,6 +76,8 @@ public:
 	void ReadAsync(ByteArray* buffer, void* data = nullptr);
 	void setSocketCallBacks(SocketCallBacks* ptr);
 	void destory();
+
+	bool destroyed() const { return _destroyed; }
 private:
 	bool endPointToNative();;
 	void acceptConnection();
@@ -88,6 +96,8 @@ private:
 	ByteArray* _receiveBuffer;
 	void* _receiveDataPtr;
 	SocketCallBacks* _callbacksPtr;
+	int _connection_ms;
+	bool _destroyed;
 };
 
 

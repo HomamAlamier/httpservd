@@ -1,7 +1,6 @@
 #include <Core/ByteArray.h>
 #include <memory.h>
 #include <Log/Log.h>
-
 ByteArray::ByteArray()
 	: _buffer(nullptr)
 	, _size(0)
@@ -20,15 +19,14 @@ ByteArray::ByteArray(const std::string& str)
 ByteArray::ByteArray(const char* bytes, unsigned size)
 	: ByteArray()
 {
-	_buffer = new char[size_t(size) + 1];
+	_buffer = new char[size_t(size)];
 	_size = size;
 	copyData(bytes, 0, size);
-	_buffer[size] = '\0';
 }
 ByteArray::ByteArray(unsigned size)
 	: ByteArray()
 {
-	_buffer = new char[size_t(size) + 1];
+	_buffer = new char[size_t(size)];
 	_size = size;
 }
 ByteArray::~ByteArray()
@@ -38,7 +36,7 @@ ByteArray::~ByteArray()
 
 void ByteArray::append(const char* bytes, unsigned size)
 {
-	char* nbuf = new char[_size + size_t(size) + 1];
+	char* nbuf = new char [_size + size_t(size)];
 	if (_buffer != nullptr)
 		memcpy(nbuf, _buffer, _size);
 	memcpy(&nbuf[_size], bytes, size);
@@ -46,10 +44,28 @@ void ByteArray::append(const char* bytes, unsigned size)
 		delete[] _buffer;
 	_buffer = nbuf;
 	_size += size;
-	_buffer[_size] = '\0';
 
 }
-
+void ByteArray::remove(unsigned from, unsigned count)
+{
+	if (from + count > _size)
+		return;
+	unsigned newSize = _size - count;
+	char* newBuffer = new char[newSize];
+	if (from > 0)
+		memcpy(newBuffer, _buffer, from);
+	memcpy(&newBuffer[from], &_buffer[from + count], _size - (from + count));
+	delete[] _buffer;
+	_buffer = newBuffer;
+	_size = newSize;
+}
+void ByteArray::allocate(unsigned size)
+{
+	if (_buffer != nullptr)
+		delete[] _buffer;
+	_buffer = new char[size];
+	_size = size;
+}
 std::string ByteArray::toStdString() const
 {
 	return std::string(_buffer, _size);
@@ -57,7 +73,12 @@ std::string ByteArray::toStdString() const
 void ByteArray::copyData(const char* bytes, int start, int size)
 {
 	if (start + size > _size)
-		return;
+	{
+		char* nbuf = new char[_size + (_size - (start + size))];
+		memcpy(nbuf, _buffer, _size);
+		delete[] _buffer;
+		_buffer = nbuf;
+	}
 	memcpy(&_buffer[start], bytes, size);
 }
 

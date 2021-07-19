@@ -5,8 +5,8 @@
 enum HttpVersion
 {
 	NoVersion,
+	V1_0,
 	V1_1,
-	V1_2,
 	V2_0
 };
 

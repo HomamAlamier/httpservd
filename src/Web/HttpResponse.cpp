@@ -1,8 +1,7 @@
 #include <Web/HttpResponse.h>
 #include <Core/ByteArray.h>
 #include <Log/Log.h>
-
-
+#include <Core/IO/MemoryStream.h>
 const char* statusStrings[] = 
 {
 	"200 OK",
@@ -62,19 +61,24 @@ std::string httpVersionToString(HttpVersion ver)
 	switch (ver)
 	{
 	case NoVersion: return "NoVersion";
+	case V1_0: return "HTTP/1.0";
 	case V1_1: return "HTTP/1.1";
-	case V1_2: return "HTTP/1.2";
 	case V2_0: return "HTTP/2.0";
 	}
+	return "";
 }
 
 
-HttpResponse::HttpResponse()
+HttpResponse::HttpResponse(MemoryStream* stream)
 	: _statusCode(0)
 	, _version(HttpVersion::NoVersion)
-	, _data(new ByteArray())
+	, _stream(stream)
 {
 
+}
+HttpResponse::~HttpResponse()
+{
+	delete _stream;
 }
 std::string HttpResponse::statusCodeString() const
 {
@@ -92,7 +96,7 @@ std::string HttpResponse::serialize() const
 	{
 		tmp += item.first + ": " + item.second + "\r\n";
 	}
-	tmp += "Content-Length: " + std::to_string(_data->size());
+	tmp += "Content-Length: " + std::to_string(_stream->availableBytes());
 	tmp += "\r\n\r\n";
 	return tmp;
 }
@@ -102,13 +106,9 @@ void HttpResponse::addHeader(std::string key, std::string value)
 		&& key != "Content-Type")
 		_headers.insert(std::pair<std::string, std::string>(key, value));
 }
-void HttpResponse::setData(const ByteArray& byteArray)
-{
-	if (_data)
-		delete _data;
-	_data = new ByteArray(byteArray);
-}
 int HttpResponse::contentLength() const
 {
-	return _data->size();
+	if (!_stream)
+		return 0;
+	return _stream->availableBytes();
 }

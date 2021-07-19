@@ -3,7 +3,10 @@
 #include <thread>
 #include <Core/ByteArray.h>
 #include <Log/Log.h>
-
+#include <vector>
+#include <Core/Threading/Task.h>
+#include <Core/Threading/TaskPool.h>
+#include <mutex>
 #ifdef _WIN32
 	#ifndef WIN32_LEAN_AND_MEAN
 		#define WIN32_LEAN_AND_MEAN
@@ -54,9 +57,179 @@ void* get_in_addr(struct sockaddr* sa)
 	return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+const int _worker_count_ = 4;
+
+static std::vector<Socket*> _accept_queue_;
+static std::vector<Socket*> _receive_queue_;
+static std::vector<ByteArray*> _receive_buffer_queue_;
+static std::mutex _accept_queue_mutex_;
+static std::mutex _receive_queue_mutex_;
+static std::thread* _receive_workers_[_worker_count_];
+static std::thread* _accept_workers_[_worker_count_];
+static Socket* _receive_worker_context_[_worker_count_];
+static Socket* _accept_worker_context_[_worker_count_];
+static bool _receive_worker_running_[_worker_count_];
+static bool _accept_worker_running_[_worker_count_];
+
+void _async_accept_socket_(Socket* sock)
+{
+	_accept_queue_mutex_.lock();
+	_accept_queue_.push_back(sock);
+	_accept_queue_mutex_.unlock();
+}
+void _async_receive_socket_(Socket* sock)
+{
+	_receive_queue_mutex_.lock();
+	_receive_queue_.push_back(sock);
+	_receive_queue_mutex_.unlock();
+}
+void _async_accept_invoke_callback_(int pid, Socket* parent, Socket* child)
+{
+	_accept_worker_running_[pid] = true;
+	parent->_callbacksPtr->acceptConnectionCallBack(child);
+	_accept_worker_running_[pid] = false;
+}
+void _async_accept_receive_callback_(int pid, Socket* parent, ByteArray* buffer, void* data, int size)
+{
+	_receive_worker_running_[pid] = true;
+	parent->_callbacksPtr->dataReceiveCallBack(parent, buffer, data, size);
+	_receive_worker_running_[pid] = false;
+}
+int _async_accept_free_worker_()
+{
+	for(int i = 0; i < _worker_count_; ++i)
+	{
+		if (_accept_workers_[i] == nullptr)
+		{
+			return i;
+		}
+		else if (!_accept_workers_[i]->joinable())
+		{
+			delete _accept_workers_[i];
+			return i;
+		}
+	}
+	while(true)
+	{
+		for(int i = 0; i < _worker_count_; ++i)
+		{
+			if (!_accept_worker_running_[i])
+			{
+				_accept_workers_[i]->join();
+				delete _accept_workers_[i];
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+int _async_receive_free_worker_()
+{
+	for(int i = 0; i < _worker_count_; ++i)
+	{
+		if (_receive_workers_[i] == nullptr)
+		{
+			return i;
+		}
+		else if (!_receive_workers_[i]->joinable())
+		{
+			delete _receive_workers_[i];
+			return i;
+		}
+	}
+	while(true)
+	{
+		for(int i = 0; i < _worker_count_; ++i)
+		{
+			if (!_receive_worker_running_[i])
+			{
+				_receive_workers_[i]->join();
+				delete _receive_workers_[i];
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+void _async_accept_handler_()
+{
+	while (true)
+	{
+		_accept_queue_mutex_.lock();
+		for(int i = 0; i < _accept_queue_.size(); ++i)
+		{
+			auto sock = _accept_queue_[i];
+			auto s = sock->Accept();
+			int free_worker = _async_accept_free_worker_();
+			_accept_workers_[free_worker] = new std::thread(_async_accept_invoke_callback_, i, sock, s);
+
+			if (sock->status() != Socket::Listening || sock->destroyed())
+			{
+				sock->destory();
+				_accept_queue_.erase(_accept_queue_.begin() + i);
+				break;
+			}
+		}
+		_accept_queue_mutex_.unlock();
+		std::this_thread::sleep_for(std::chrono::microseconds(50));
+	}
+}
+void _async_receive_handler_()
+{
+	while (true)
+	{
+		_receive_queue_mutex_.lock();
+		for(int i = 0; i < _receive_queue_.size(); ++i)
+		{
+			auto sock = _receive_queue_[i];
+
+			bool inWork = false;
+			for(int i = 0; i < _worker_count_; ++i)
+			{
+				auto t = _receive_workers_[i];
+				if (t != nullptr && _receive_worker_context_[i] == sock && t->joinable())
+				{
+					inWork = true;
+					break;
+				}
+			}
+			if (inWork)
+				continue;
+
+			auto size = sock->Read(sock->_receiveBuffer, sock->_receiveBuffer->size());
+			int free_worker = _async_receive_free_worker_();
+			_receive_workers_[free_worker] = new std::thread(_async_accept_receive_callback_, i, sock, sock->_receiveBuffer, sock->_receiveDataPtr, size);
+
+			if (sock->status() != Socket::Connected || sock->destroyed())
+			{
+				sock->destory();
+				_receive_queue_.erase(_receive_queue_.begin() + i);
+				break;
+			}
+		}
+		_receive_queue_mutex_.unlock();
+		std::this_thread::sleep_for(std::chrono::microseconds(50));
+	}
+	
+}
+static std::thread _async_accept_worker_(_async_accept_handler_);
+static std::thread _async_receive_worker_(_async_receive_handler_);
+
 
 static bool _os_socket_inited_ = false;
 static int _socket_instance_count = 0;
+
+bool _chk_socket_error_(socket_tt s)
+{
+	int error_code;
+	socklen_t error_code_size = sizeof(error_code);
+	getsockopt(s, SOL_SOCKET, SO_ERROR, &error_code, &error_code_size);
+	if (error_code != 0)
+	{
+		return true;
+	}
+	else return false;
+}
 
 
 Socket::Socket(SocketType type, Protocol protocol) 
@@ -73,6 +246,8 @@ Socket::Socket(SocketType type, Protocol protocol)
 	, _receiveThreadAlive(false)
 	, _receiveDataPtr(nullptr)
 	, _callbacksPtr(nullptr)
+	, _connection_ms(0)
+	, _destroyed(false)
 {
 	if (!_os_socket_inited_)
 	{
@@ -94,19 +269,14 @@ Socket::Socket(SocketType type, Protocol protocol)
 }
 Socket::~Socket()
 {
-	log_WriteLine<Socket>(Debug, "~");
-	_socket_instance_count--;
-	close();
-	if (_socket_instance_count == 0 && _os_socket_inited_)
-	{
-		_os_socket_inited_ = false;
-		#ifdef _WIN32
-			WSACleanup();
-		#endif // _WIN32
-	}
+	destory();
 }
 bool Socket::endPointToNative()
 {
+	if (_nIp != nullptr)
+	{
+		freeaddrinfo(_nIp);
+	}
 	struct addrinfo hints;
 	ZeroMemory(&hints, sizeof hints);
 	hints.ai_family = _endPoint->ipType();
@@ -133,7 +303,21 @@ bool Socket::Listen(int backlog)
 		closesocket(_sockPtr);
 
 	_sockPtr = socket(_endPoint->ipType(), _type, _pro);
-
+	int t = 1;
+	if (setsockopt(_sockPtr, SOL_SOCKET, SO_REUSEADDR, &t, sizeof(t)) < 0)
+		log_WriteLine<Socket>(Error, "setsockopt(SO_REUSEADDR) failed");
+	if (setsockopt(_sockPtr, SOL_SOCKET, SO_REUSEPORT, &t, sizeof(t)) < 0)
+		log_WriteLine<Socket>(Error, "setsockopt(SO_REUSEPORT) failed");
+	#ifdef _WIN32
+		DWORD tv = 3 * 1000;
+	#else
+		struct timeval tv;
+		tv.tv_sec = 3;
+		tv.tv_usec = 0;
+	#endif // DEBUG
+	if (setsockopt(_sockPtr, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof tv))
+		log_WriteLine<Socket>(Error, "setsockopt(SO_RCVTIMEO) failed");
+		
 	if (!endPointToNative())
 		return false;
 
@@ -153,6 +337,41 @@ bool Socket::Listen(int backlog)
 		return false;
 	}
 	_st = Listening;
+	_running = true;
+	return true;
+}
+bool Socket::Connect(const IPEndPoint& ipEndPoint)
+{
+	if (_sockPtr != 0)
+		closesocket(_sockPtr);
+
+		
+	struct sockaddr_in addr;
+	addr.sin_family = int(ipEndPoint.ipType());
+	addr.sin_port = htons(ipEndPoint.port());
+
+	if (inet_pton(ipEndPoint.ipType(), ipEndPoint.ip().c_str(), &addr.sin_addr) <= 0)
+	{
+		log_WriteLine<Socket>(Error, "Connect: inet_pton failed !");
+		log_WriteLine<Socket>(Error, lastErr());
+		return false;
+	}
+
+
+	_sockPtr = socket(ipEndPoint.ipType(), _type, _pro);
+
+	
+
+	log_WriteLine<Socket>(Debug, "Connecting...");
+	if (connect(_sockPtr, (struct sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR)
+	{
+		log_WriteLine<Socket>(Error, "Socket connect failed !");
+		log_WriteLine<Socket>(Error, lastErr());
+		return false;
+	}
+	_endPoint = new IPEndPoint(ipEndPoint);
+
+	_st = Connected;
 	_running = true;
 	return true;
 }
@@ -207,31 +426,45 @@ void Socket::AcceptAsync()
 {
 	if (_acceptThread != nullptr || _callbacksPtr == nullptr)
 		return;
-	_running = true;
-	_acceptThread = new std::thread(&Socket::acceptConnection, this);
+	_async_accept_socket_(this);
 }
 void Socket::acceptConnection()
 {
-	_acceptThreadAlive = true;
+	/*_acceptThreadAlive = true;
 	while (_running)
 	{
 		Socket* s = Accept();
 		_callbacksPtr->acceptConnectionCallBack(s);
 	}
-	_acceptThreadAlive = false;
+	_acceptThreadAlive = false;*/
 }
 int Socket::Write(const ByteArray& byteArray)
 {
 	if (_sockPtr == 0 || _st != Connected)
 		return 0;
-	int count = send(_sockPtr, byteArray.dataPtr(), byteArray.size(), 0);
+	int count = send(_sockPtr, byteArray.dataPtr(), byteArray.size(), MSG_NOSIGNAL);
+	if (_chk_socket_error_(_sockPtr))
+	{
+		close();
+		return 0;
+	}
 	return count;
 }
 int Socket::Read(ByteArray* byteArray, int size)
 {
 	if (_sockPtr == 0 || _st != Connected || byteArray == nullptr)
 		return 0;
-	int count = recv(_sockPtr, byteArray->dataPtr(), size, 0);
+
+	if (byteArray->size() == 0)
+	{
+		byteArray->allocate(size);
+	}
+	int count = recv(_sockPtr, byteArray->dataPtr(), size, MSG_NOSIGNAL);
+	if (_chk_socket_error_(_sockPtr))
+	{
+		close();
+		return 0;
+	}
 	return count;
 }
 void Socket::ReadAsync(ByteArray* buffer, void* data)
@@ -240,21 +473,34 @@ void Socket::ReadAsync(ByteArray* buffer, void* data)
 		return;
 	_receiveBuffer = buffer;
 	_receiveDataPtr = data;
-	_running = true;
-	_receiveThread = new std::thread(&Socket::receiveData, this);
+	//_running = true;
+	_async_receive_socket_(this);
 }
 void Socket::receiveData()
 {
-	_receiveThreadAlive = true;
-	while (_running && _sockPtr > 0 && _st == Connected)
+	/*_receiveThreadAlive = true;
+	size_t x = registerThread(_receiveThread);
+	while (_running && _sockPtr > 0 && _st == Connected && _connection_ms < 3000)
 	{
-		int c = Read(_receiveBuffer, _receiveBuffer->size());
+		int c = 0;
+		if (dataAvailable() > 0)
+			c = Read(_receiveBuffer, _receiveBuffer->size());
 		if (c > 0 && _running)
 		{
-			_callbacksPtr->dataReceiveCallBack(this, _receiveBuffer, _receiveDataPtr, c);
+
+			task_pool_add(new Task(std::bind(&Socket::receiveData, this, this, _receiveBuffer, _receiveDataPtr, c)));
+			_connection_ms = 0;
 		}
+		std::this_thread::sleep_for(std::chrono::microseconds(10));
+		_connection_ms += 10;
+	}
+	if (_connection_ms == 3000)
+	{
+		close();
+		destory();
 	}
 	_receiveThreadAlive = false;
+	setState(x, 0);*/
 }
 void Socket::setSocketCallBacks(SocketCallBacks* ptr)
 {
@@ -265,6 +511,8 @@ void Socket::setSocketCallBacks(SocketCallBacks* ptr)
 }
 int Socket::dataAvailable() const
 {
+	if (_st != Connected || _destroyed)
+		return 0;
 	#ifdef _WIN32
 		u_long count = 0;
 		ioctlsocket(_sockPtr, FIONREAD, &count);
@@ -278,7 +526,17 @@ int Socket::dataAvailable() const
 }
 void Socket::destory()
 {
-	//while (_receiveThreadAlive || _acceptThreadAlive)
-		//std::this_thread::sleep_for(std::chrono::milliseconds(5));
-	delete this;
+	if (_destroyed)
+		return;
+	log_WriteLine<Socket>(Debug, "~");
+	_socket_instance_count--;
+	close();
+	if (_socket_instance_count == 0 && _os_socket_inited_)
+	{
+		_os_socket_inited_ = false;
+		#ifdef _WIN32
+			WSACleanup();
+		#endif // _WIN32
+	}
+	_destroyed = true;
 }
