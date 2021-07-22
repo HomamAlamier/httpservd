@@ -4,8 +4,6 @@
 #include <Core/ByteArray.h>
 #include <Log/Log.h>
 #include <vector>
-#include <Core/Threading/Task.h>
-#include <Core/Threading/TaskPool.h>
 #include <mutex>
 #ifdef _WIN32
 	#ifndef WIN32_LEAN_AND_MEAN
