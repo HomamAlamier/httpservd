@@ -14,13 +14,6 @@
 struct Main{};
 int main()
 {
-    ByteArray ba;
-	MemoryStream ms(&ba, Stream::ReadWrite);
-	ms.write("HelloWorld", 11);
-    HttpRequest r("GET /redirect HTTP/1.1\r\n", &ms);
-
-
-
 	auto cwd = std::filesystem::current_path().string();
 	log_WriteLine<Main>(Debug, "Current Dir = " + cwd);
 
