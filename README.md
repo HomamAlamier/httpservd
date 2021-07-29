@@ -15,6 +15,7 @@ the out will be in
 ```
 [Build Directory]/bin
 ```
+
 or just use the following commands to build :
 ```
 git clone https://github.com/HomamAlamier/Server
