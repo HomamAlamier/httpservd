@@ -2,8 +2,12 @@
 ## What it is
 Server is a minimal cross platform web server built using C++
 
-it supports modules written in C++ or C [not fully working yet !]
-files and directory permissions 
+## It Supports
+multiple connection handling
+
+modules written in C++ or C (not fully working yet !)
+
+files and directory permissions
 
 ## How to build
 just clone the repository and use cmake to build it
