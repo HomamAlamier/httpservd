@@ -1,6 +1,6 @@
-# Server
+# httpservd
 ## What it is
-Server is a minimal cross platform web server built using C++
+httpservd is a minimal cross platform web server built using C++
 
 ## It Supports
 multiple connection handling
