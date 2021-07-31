@@ -18,8 +18,8 @@ the out will be in
 
 or just use the following commands to build :
 ```
-git clone https://github.com/HomamAlamier/Server
-cd Server
+git clone https://github.com/HomamAlamier/httpservd
+cd httpservd
 mkdir build
 cd build
 cmake ../
