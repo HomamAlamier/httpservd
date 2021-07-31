@@ -1,5 +1,4 @@
 ﻿
-#include "Server.h"
 #include <Log/Log.h>
 #include <chrono>
 #include <thread>
